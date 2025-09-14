@@ -47,8 +47,8 @@ export interface Newsletter {
   preheader: string
   content: string
   html_content: string
-  sections: any
-  selected_articles: any
+  sections: {}jsonb
+  selected_articles: {}jsonb
   word_count: number
   estimated_read_time: number
   status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected'
@@ -67,7 +67,7 @@ export interface Approval {
   approval_type: 'stories' | 'subject-lines' | 'images' | 'final-content'
   item_id: string
   workflow_id: string
-  data: any
+  data: {}jsonb
   approved: boolean
   feedback: string
   user_id: string
@@ -84,8 +84,8 @@ export interface WorkflowLog {
   workflow_type: 'data-ingestion' | 'newsletter-generation' | 'approval-processing' | 'publishing'
   status: 'started' | 'running' | 'completed' | 'failed' | 'paused'
   step_name: string
-  input_data: any
-  output_data: any
+  input_data: {}jsonb
+  output_data: {}jsonb
   error_message: string
   execution_time: number
   items_processed: number
