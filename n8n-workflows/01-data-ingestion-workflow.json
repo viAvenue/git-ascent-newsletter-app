@@ -1,0 +1,474 @@
+{
+  "name": "Newsletter Data Ingestion (Advanced Scheduling)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *",
+              "description": "Daily at 8:00 AM UTC - configurable via frontend"
+            }
+          ]
+        },
+        "schedulingOptions": {
+          "daily": "0 8 * * *",
+          "weekdays": "0 8 * * 1-5",
+          "twiceDaily": "0 8,16 * * *",
+          "every6Hours": "0 */6 * * *",
+          "weekly": "0 8 * * 1",
+          "customCron": "user-defined"
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily Schedule (8 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "data-ingestion",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "manual-webhook",
+      "name": "Manual Webhook (Optional)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 400],
+      "webhookId": "data-ingestion-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Default source configuration for scheduled runs\nconst defaultSources = [\n  {\n    id: 'hbr-1',\n    name: 'Harvard Business Review',\n    url: 'https://feeds.hbr.org/harvardbusiness',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'mckinsey-1',\n    name: 'McKinsey Insights',\n    url: 'https://www.mckinsey.com/insights',\n    type: 'Web Scraper',\n    enabled: true\n  },\n  {\n    id: 'mit-sloan-1',\n    name: 'MIT Sloan Management Review',\n    url: 'https://sloanreview.mit.edu/feed/',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'deloitte-1',\n    name: 'Deloitte Insights',\n    url: 'https://www2.deloitte.com/insights/us/en.rss',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'bcg-1',\n    name: 'BCG Insights',\n    url: 'https://www.bcg.com/insights',\n    type: 'Web Scraper',\n    enabled: true\n  },\n  {\n    id: 'first-round-1',\n    name: 'First Round Review',\n    url: 'https://review.firstround.com/feed.xml',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'a16z-1',\n    name: 'Andreessen Horowitz',\n    url: 'https://a16z.com/feed/',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'yc-1',\n    name: 'Y Combinator Blog',\n    url: 'https://blog.ycombinator.com/feed/',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'techcrunch-1',\n    name: 'TechCrunch (Business)',\n    url: 'https://techcrunch.com/category/startups/feed/',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'fastcompany-1',\n    name: 'Fast Company',\n    url: 'https://www.fastcompany.com/rss.xml',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'inc-1',\n    name: 'Inc.com',\n    url: 'https://www.inc.com/rss.xml',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'forbes-1',\n    name: 'Forbes Leadership',\n    url: 'https://www.forbes.com/leadership/feed/',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'wharton-1',\n    name: 'Knowledge@Wharton',\n    url: 'https://knowledge.wharton.upenn.edu/feed/',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'stanford-1',\n    name: 'Stanford Business Insights',\n    url: 'https://www.gsb.stanford.edu/insights/feed',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'gallup-1',\n    name: 'Gallup Business Journal',\n    url: 'https://news.gallup.com/rss/business.xml',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'strategy-business-1',\n    name: 'Strategy+Business',\n    url: 'https://www.strategy-business.com/feed',\n    type: 'RSS',\n    enabled: true\n  },\n  {\n    id: 'bain-1',\n    name: 'Bain & Company Insights',\n    url: 'https://www.bain.com/insights/',\n    type: 'Web Scraper',\n    enabled: true\n  },\n  {\n    id: 'sequoia-1',\n    name: 'Sequoia Capital Insights',\n    url: 'https://www.sequoiacap.com/article/',\n    type: 'Web Scraper',\n    enabled: true\n  }\n];\n\n// Check if this is a scheduled run or manual trigger\nconst triggerData = $input.first();\nconst isScheduled = triggerData.json === undefined || Object.keys(triggerData.json).length === 0;\n\nif (isScheduled) {\n  // Scheduled run - use default sources\n  return defaultSources.map(source => ({ json: source }));\n} else {\n  // Manual trigger - use provided sources or default\n  const config = triggerData.json.body || {};\n  const sources = config.sources || defaultSources;\n  return sources.map(source => ({ json: source }));\n}"
+      },
+      "id": "prepare-sources",
+      "name": "Prepare Sources Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "workflowId",
+              "value": "={{ $runId }}"
+            },
+            {
+              "name": "triggerType",
+              "value": "={{ $node['Daily Schedule (8 AM)'].json ? 'scheduled' : 'manual' }}"
+            },
+            {
+              "name": "status",
+              "value": "started"
+            },
+            {
+              "name": "sourcesCount",
+              "value": "={{ $input.all().length }}"
+            }
+          ]
+        }
+      },
+      "id": "set-workflow-info",
+      "name": "Set Workflow Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "rss-type",
+              "leftValue": "={{ $json.type }}",
+              "rightValue": "RSS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "source-type-switch",
+      "name": "Source Type Switch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}"
+      },
+      "id": "rss-reader",
+      "name": "RSS Reader",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.firecrawl.dev/v0/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.firecrawlApi.apiKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "url": "={{ $json.url }}",
+          "formats": ["markdown"],
+          "onlyMainContent": true
+        }
+      },
+      "id": "web-scraper",
+      "name": "Web Scraper (Firecrawl)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst processedItems = [];\n\nfor (const item of items) {\n  const data = item.json;\n  let cleanTitle = '';\n  let cleanContent = '';\n  let cleanSummary = '';\n  let sourceUrl = '';\n  let sourceName = '';\n  \n  // Handle RSS feed data\n  if (data.title) {\n    cleanTitle = data.title.replace(/<[^>]*>/g, '').trim();\n    cleanContent = data.description?.replace(/<[^>]*>/g, '').trim() || '';\n    cleanSummary = cleanContent.substring(0, 500) + (cleanContent.length > 500 ? '...' : '');\n    sourceUrl = data.link || data.url || '';\n    \n    // Get source name from the prepare sources config\n    const sourceData = $('Prepare Sources Config').all().find(s => s.json.url === data.feedUrl);\n    sourceName = sourceData?.json.name || 'Unknown Source';\n  }\n  \n  // Handle Firecrawl data\n  if (data.data && data.data.markdown) {\n    cleanContent = data.data.markdown;\n    cleanTitle = cleanContent.split('\\n')[0].replace(/^#+\\s*/, '').trim();\n    cleanSummary = cleanContent.substring(0, 500) + (cleanContent.length > 500 ? '...' : '');\n    sourceUrl = data.data.sourceURL || '';\n    \n    // Get source name from the prepare sources config\n    const sourceData = $('Prepare Sources Config').all().find(s => s.json.url === sourceUrl);\n    sourceName = sourceData?.json.name || 'Unknown Source';\n  }\n  \n  const wordCount = cleanContent.split(/\\s+/).length;\n  const readingTime = Math.ceil(wordCount / 200); // Average reading speed\n  \n  if (wordCount > 50 && cleanTitle.length > 10) {\n    processedItems.push({\n      json: {\n        title: cleanTitle,\n        content: cleanContent,\n        summary: cleanSummary,\n        url: sourceUrl,\n        source: sourceName,\n        source_type: data.data ? 'Web Scraper' : 'RSS',\n        word_count: wordCount,\n        reading_time: readingTime,\n        published_date: data.pubDate || data.date || new Date().toISOString()\n      }\n    });\n  }\n}\n\nreturn processedItems;"
+      },
+      "id": "process-content",
+      "name": "Process Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Get",
+        "tableId": "articles",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "title",
+              "condition": "eq",
+              "keyValue": "={{ $json.title }}"
+            }
+          ]
+        }
+      },
+      "id": "check-duplicates",
+      "name": "Check for Duplicates",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentItem = $input.first().json;\nconst duplicateCheck = $input.all();\n\n// If no duplicates found (empty array), proceed with AI filtering\nif (duplicateCheck.length === 1 && (!duplicateCheck[0] || Object.keys(duplicateCheck[0]).length === 0)) {\n  return [{\n    json: {\n      ...currentItem,\n      isDuplicate: false\n    }\n  }];\n} else {\n  // Duplicate found, log and skip\n  console.log(`Duplicate found for: ${currentItem.title}`);\n  return [];\n}"
+      },
+      "id": "filter-duplicates",
+      "name": "Filter Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Evaluate this article for business relevance. Focus on strategy, operations, leadership, and growth topics. Respond with JSON: {\"relevant\": boolean, \"score\": number (0-100), \"topics\": [\"topic1\", \"topic2\"], \"reason\": \"explanation\"}"
+          },
+          {
+            "role": "user",
+            "content": "Title: {{ $json.title }}\n\nSummary: {{ $json.summary }}\n\nSource: {{ $json.source }}"
+          }
+        ],
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "ai-filter",
+      "name": "AI Content Filter",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [2000, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\ntry {\n  const aiResponse = JSON.parse(item.message.content);\n  \n  if (aiResponse.relevant === true && aiResponse.score >= 70) {\n    return [{\n      json: {\n        title: item.title,\n        content: item.content,\n        summary: item.summary,\n        url: item.url,\n        source: item.source,\n        source_type: item.source_type,\n        word_count: item.word_count,\n        reading_time: item.reading_time,\n        published_date: item.published_date,\n        ai_score: aiResponse.score,\n        ai_relevant: true,\n        ai_topics: JSON.stringify(aiResponse.topics),\n        ai_reason: aiResponse.reason,\n        status: 'processed',\n        duplicate_check: true\n      }\n    }];\n  } else {\n    console.log(`Article filtered out: ${item.title} (Score: ${aiResponse.score})`);\n    return [];\n  }\n} catch (error) {\n  console.log('Error parsing AI response:', error);\n  return [];\n}"
+      },
+      "id": "prepare-database-insert",
+      "name": "Prepare Database Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "articles",
+        "records": [
+          {
+            "title": "={{ $json.title }}",
+            "content": "={{ $json.content }}",
+            "summary": "={{ $json.summary }}",
+            "url": "={{ $json.url }}",
+            "source": "={{ $json.source }}",
+            "source_type": "={{ $json.source_type }}",
+            "word_count": "={{ $json.word_count }}",
+            "reading_time": "={{ $json.reading_time }}",
+            "published_date": "={{ $json.published_date }}",
+            "ai_score": "={{ $json.ai_score }}",
+            "ai_relevant": "={{ $json.ai_relevant }}",
+            "ai_topics": "={{ $json.ai_topics }}",
+            "ai_reason": "={{ $json.ai_reason }}",
+            "status": "={{ $json.status }}",
+            "duplicate_check": "={{ $json.duplicate_check }}"
+          }
+        ]
+      },
+      "id": "save-to-database",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2440, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "workflow_logs",
+        "records": [
+          {
+            "workflow_id": "={{ $runId }}",
+            "workflow_name": "Data Ingestion (Scheduled)",
+            "workflow_type": "data-ingestion",
+            "status": "completed",
+            "step_name": "Article Processing Complete",
+            "items_processed": "={{ $input.all().length }}",
+            "output_data": "={{ JSON.stringify({articlesProcessed: $input.all().length, triggerType: $('Set Workflow Info').first().json.triggerType, completedAt: $now}) }}"
+          }
+        ]
+      },
+      "id": "log-completion",
+      "name": "Log Workflow Completion",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2660, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule (8 AM)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sources Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Webhook (Optional)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sources Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sources Config": {
+      "main": [
+        [
+          {
+            "node": "Set Workflow Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Workflow Info": {
+      "main": [
+        [
+          {
+            "node": "Source Type Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source Type Switch": {
+      "main": [
+        [
+          {
+            "node": "RSS Reader",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Web Scraper (Firecrawl)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Reader": {
+      "main": [
+        [
+          {
+            "node": "Process Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Scraper (Firecrawl)": {
+      "main": [
+        [
+          {
+            "node": "Process Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Content": {
+      "main": [
+        [
+          {
+            "node": "Check for Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Filter Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Duplicates": {
+      "main": [
+        [
+          {
+            "node": "AI Content Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Content Filter": {
+      "main": [
+        [
+          {
+            "node": "Prepare Database Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Database Insert": {
+      "main": [
+        [
+          {
+            "node": "Save to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Log Workflow Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "newsletter-automation",
+      "name": "Newsletter Automation"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "data-ingestion-scheduled-v1"
+}

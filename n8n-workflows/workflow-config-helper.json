@@ -1,0 +1,172 @@
+{
+  "name": "Newsletter Automation Setup Helper",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "setup-helper",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "setup-webhook",
+      "name": "Setup Helper Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "setup-helper-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Configuration helper for newsletter automation setup\nconst setupData = $input.first().json.body;\n\n// Generate configuration based on user inputs\nconst config = {\n  workflows: {\n    dataIngestion: {\n      name: 'Newsletter Data Ingestion',\n      webhookPath: '/data-ingestion',\n      description: 'Scrapes content from sources and filters with AI, stores in Supabase'\n    },\n    newsletterGeneration: {\n      name: 'Newsletter Generation & Approval',\n      webhookPath: '/newsletter-generation',\n      description: 'Analyzes content from Supabase and generates newsletter with approvals'\n    },\n    approvalProcessing: {\n      name: 'Approval Processing Handler',\n      webhookPath: '/process-approval',\n      description: 'Handles frontend approvals and continues workflows'\n    },\n    newsletterPublishing: {\n      name: 'Newsletter Publishing & Distribution',\n      webhookPath: '/publish-newsletter',\n      description: 'Formats and stores newsletters in Supabase for distribution'\n    }\n  },\n  credentials: {\n    required: [\n      {\n        name: 'openAiApi',\n        type: 'OpenAI API',\n        description: 'Required for AI content filtering and generation',\n        setup: 'Add your OpenAI API key in n8n credentials'\n      },\n      {\n        name: 'newsletter_supabase',\n        type: 'Supabase Database',\n        description: 'Required for storing articles, newsletters, and approvals',\n        setup: 'Create Supabase project and add connection details'\n      }\n    ],\n    optional: [\n      {\n        name: 'firecrawlApi',\n        type: 'Firecrawl API',\n        description: 'Enhanced web scraping capabilities',\n        setup: 'Get API key from firecrawl.dev'\n      },\n      {\n        name: 'mailchimpApi',\n        type: 'Email Service',\n        description: 'For newsletter distribution',\n        setup: 'Configure your preferred email service'\n      }\n    ]\n  },\n  configuration: {\n    supabaseDatabase: {\n      service: 'Supabase Postgres',\n      tables: ['articles', 'newsletters', 'approvals', 'workflow_logs'],\n      description: 'Create these tables in your Supabase project using the provided SQL scripts',\n      features: ['Real-time subscriptions', 'Auto-generated REST API', 'Built-in auth']\n    },\n    webhookUrls: {\n      base: setupData.n8nUrl || 'https://your-n8n-instance.com',\n      netlifyBase: setupData.netlifyUrl || 'https://your-netlify-site.netlify.app',\n      description: 'Update these URLs in all workflow nodes'\n    },\n    contentSources: setupData.sources || [\n      {\n        name: 'Harvard Business Review',\n        url: 'https://feeds.hbr.org/harvardbusiness',\n        type: 'RSS',\n        enabled: true\n      },\n      {\n        name: 'McKinsey Insights',\n        url: 'https://www.mckinsey.com/featured-insights',\n        type: 'Web Scraper',\n        enabled: true\n      }\n    ]\n  },\n  setupSteps: [\n    {\n      step: 1,\n      title: 'Create Supabase Project',\n      description: 'Set up managed Postgres database with real-time features',\n      action: 'Visit supabase.com and create new project'\n    },\n    {\n      step: 2,\n      title: 'Run Database Schema',\n      description: 'Create all required tables and indexes in Supabase',\n      action: 'Run the SQL scripts provided in SUPABASE-SETUP.md'\n    },\n    {\n      step: 3,\n      title: 'Import Workflows',\n      description: 'Import all 5 JSON files into your n8n instance',\n      action: 'Go to Workflows → Import from File'\n    },\n    {\n      step: 4,\n      title: 'Configure Supabase Credentials',\n      description: 'Set up Supabase connection in n8n credentials',\n      action: 'Go to Credentials → Add Credential → Supabase'\n    },\n    {\n      step: 5,\n      title: 'Configure API Credentials',\n      description: 'Set up OpenAI, Firecrawl, and other API credentials',\n      action: 'Add API keys in n8n credentials manager'\n    },\n    {\n      step: 6,\n      title: 'Update URLs',\n      description: 'Replace placeholder URLs with your actual endpoints',\n      action: 'Search and replace in workflow nodes'\n    },\n    {\n      step: 7,\n      title: 'Test Workflows',\n      description: 'Verify webhook endpoints and database connections',\n      action: 'Test each workflow webhook manually'\n    },\n    {\n      step: 8,\n      title: 'Deploy to Netlify',\n      description: 'Set up frontend with Supabase real-time integration',\n      action: 'Follow NETLIFY-DEPLOYMENT.md guide'\n    }\n  ]\n};\n\nreturn [{ json: config }];"
+      },
+      "id": "generate-config",
+      "name": "Generate Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate current setup and provide recommendations\nconst config = $input.first().json;\nconst setupData = $input.first().json;\n\n// Check for common issues\nconst validation = {\n  status: 'checking',\n  checks: [\n    {\n      name: 'N8N Instance Accessible',\n      status: 'pending',\n      message: 'Checking if n8n instance is accessible...',\n      critical: true\n    },\n    {\n      name: 'Netlify Functions Available',\n      status: 'pending',\n      message: 'Checking if Netlify functions are deployed...',\n      critical: true\n    },\n    {\n      name: 'Supabase Project Access',\n      status: 'pending',\n      message: 'Validating Supabase project connection and tables...',\n      critical: true\n    },\n    {\n      name: 'OpenAI API Key',\n      status: 'pending',\n      message: 'Testing OpenAI API connectivity...',\n      critical: true\n    },\n    {\n      name: 'Firecrawl API',\n      status: 'pending',\n      message: 'Testing Firecrawl API (optional)...',\n      critical: false\n    }\n  ],\n  recommendations: [\n    {\n      priority: 'high',\n      title: 'Set Up Supabase Project',\n      description: 'Create Supabase project with all required tables and real-time features',\n      action: 'Run SQL scripts from SUPABASE-SETUP.md in Supabase SQL editor'\n    },\n    {\n      priority: 'high',\n      title: 'Configure Supabase Credentials',\n      description: 'Add Supabase connection details to n8n credentials',\n      action: 'Create Supabase credential named newsletter_supabase in n8n'\n    },\n    {\n      priority: 'high',\n      title: 'Deploy to Netlify',\n      description: 'Set up frontend with Supabase real-time integration',\n      action: 'Follow NETLIFY-DEPLOYMENT.md for complete deployment guide'\n    },\n    {\n      priority: 'medium',\n      title: 'Configure Webhook Security',\n      description: 'Add authentication to webhook endpoints',\n      action: 'Implement API key validation in webhook handlers'\n    },\n    {\n      priority: 'medium',\n      title: 'Set Up Real-time Features',\n      description: 'Enable Supabase real-time subscriptions for live updates',\n      action: 'Configure real-time channels in frontend'\n    },\n    {\n      priority: 'low',\n      title: 'Optimize Database Performance',\n      description: 'Add recommended indexes for better query performance',\n      action: 'Run optimization queries from SUPABASE-SETUP.md'\n    }\n  ],\n  nextSteps: [\n    'Create Supabase project and run schema',\n    'Import workflow files into n8n',\n    'Configure Supabase credentials',\n    'Configure API credentials',\n    'Update placeholder URLs and settings',\n    'Deploy frontend to Netlify',\n    'Test data ingestion workflow',\n    'Test approval flow integration',\n    'Verify newsletter generation',\n    'Test publishing workflow',\n    'Set up real-time subscriptions',\n    'Monitor and optimize'\n  ]\n};\n\nreturn [{ json: validation }];"
+      },
+      "id": "validate-setup",
+      "name": "Validate Setup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate customized workflow configurations\nconst setupData = $input.first().json;\nconst userConfig = setupData.userConfig || {};\n\n// Create customized configurations for each workflow\nconst customizations = {\n  dataIngestion: {\n    sources: userConfig.sources || [],\n    filtering: {\n      aiModel: userConfig.aiModel || 'gpt-4',\n      confidenceThreshold: userConfig.confidenceThreshold || 75,\n      topics: userConfig.topics || ['Strategy', 'Operations', 'Leadership', 'Growth']\n    },\n    storage: {\n      database: 'Supabase Postgres',\n      table: 'articles',\n      duplicateDetection: userConfig.duplicateDetection !== false,\n      realTimeFeatures: true\n    }\n  },\n  newsletterGeneration: {\n    structure: userConfig.newsletterStructure || {\n      sections: [\n        { name: \"Owner's Brief\", wordCount: \"150-200\", enabled: true },\n        { name: \"Weekly Insight\", wordCount: \"300-400\", enabled: true },\n        { name: \"Signals Watch\", wordCount: \"200-300\", enabled: true },\n        { name: \"Clarity Cue\", wordCount: \"100-150\", enabled: true },\n        { name: \"Ascent Activation\", wordCount: \"50-100\", enabled: true },\n        { name: \"Owner's Edge Insight\", wordCount: \"20-50\", enabled: true },\n        { name: \"Soft CTA Footer\", wordCount: \"30-75\", enabled: true }\n      ]\n    },\n    brandVoice: userConfig.brandVoice || 'Professional yet approachable, strategic insights for business owners',\n    storyCount: userConfig.storyCount || 4,\n    storage: {\n      database: 'Supabase Postgres',\n      table: 'newsletters',\n      realTimeApprovals: true\n    }\n  },\n  publishing: {\n    emailService: userConfig.emailService || 'mailchimp',\n    distribution: {\n      autoSend: userConfig.autoSend || false,\n      testEmail: userConfig.testEmail || 'test@yourcompany.com',\n      fromName: userConfig.fromName || 'Your Company Newsletter'\n    },\n    analytics: {\n      trackingEnabled: userConfig.tracking !== false,\n      database: 'Supabase Postgres',\n      loggingTable: 'workflow_logs',\n      realTimeMetrics: true\n    }\n  }\n};\n\n// Generate environment variables\nconst envVars = {\n  netlify: {\n    SUPABASE_URL: `${userConfig.supabaseUrl || 'https://your-project-id.supabase.co'}`,\n    SUPABASE_ANON_KEY: 'your-supabase-anon-key',\n    N8N_API_URL: `${userConfig.n8nUrl || 'https://your-n8n-instance.com'}/api/v1`,\n    N8N_API_KEY: 'your-n8n-api-key',\n    N8N_WEBHOOK_URL: `${userConfig.n8nUrl || 'https://your-n8n-instance.com'}/webhook`\n  },\n  n8n: {\n    credentials: [\n      'openAiApi',\n      'newsletter_supabase',\n      'firecrawlApi',\n      userConfig.emailService + 'Api'\n    ]\n  },\n  supabase: {\n    project_url: userConfig.supabaseUrl || 'https://your-project-id.supabase.co',\n    anon_key: 'your-anon-key',\n    service_role_key: 'your-service-role-key',\n    features: ['Real-time subscriptions', 'Auto-generated REST API', 'Row Level Security']\n  }\n};\n\nreturn [{\n  json: {\n    customizations,\n    envVars,\n    generatedAt: new Date().toISOString(),\n    userConfig: userConfig\n  }\n}];"
+      },
+      "id": "generate-customizations",
+      "name": "Generate Customizations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"setupConfig\": {{ JSON.stringify($('Generate Configuration').first().json) }},\n  \"validation\": {{ JSON.stringify($('Validate Setup').first().json) }},\n  \"customizations\": {{ JSON.stringify($('Generate Customizations').first().json) }},\n  \"status\": \"configuration-generated\",\n  \"nextSteps\": [\n    \"Review the generated configuration\",\n    \"Create Supabase project and run schema\",\n    \"Import workflows into n8n\",\n    \"Configure credentials and environment variables\",\n    \"Deploy frontend to Netlify\",\n    \"Test the complete workflow\"\n  ]\n}"
+      },
+      "id": "webhook-response",
+      "name": "Configuration Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "workflow_logs",
+        "records": [
+          {
+            "workflow_id": "={{ $runId }}",
+            "workflow_name": "Setup Helper",
+            "workflow_type": "setup",
+            "status": "completed",
+            "step_name": "Configuration Generated",
+            "output_data": "{{ JSON.stringify({setupConfig: $('Generate Configuration').first().json, validation: $('Validate Setup').first().json, customizations: $('Generate Customizations').first().json}) }}",
+            "completed_at": "={{ $now }}"
+          }
+        ]
+      },
+      "id": "log-setup-completion",
+      "name": "Log Setup Completion",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 500],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Test webhook connectivity\nconst config = $input.first().json;\nconst webhookTests = [];\n\nconst webhooks = [\n  { name: 'Data Ingestion', path: '/data-ingestion' },\n  { name: 'Newsletter Generation', path: '/newsletter-generation' },\n  { name: 'Approval Processing', path: '/process-approval' },\n  { name: 'Newsletter Publishing', path: '/publish-newsletter' }\n];\n\nfor (const webhook of webhooks) {\n  webhookTests.push({\n    name: webhook.name,\n    url: `${config.configuration.webhookUrls.base}/webhook${webhook.path}`,\n    path: webhook.path,\n    status: 'pending',\n    testPayload: {\n      test: true,\n      timestamp: new Date().toISOString()\n    }\n  });\n}\n\nreturn [{\n  json: {\n    webhookTests,\n    testInstructions: [\n      'Copy the webhook URLs below',\n      'Test each endpoint with a POST request',\n      'Verify responses indicate successful workflow triggering',\n      'Check n8n execution logs for any errors',\n      'Verify Supabase connections are working',\n      'Test real-time subscriptions in frontend'\n    ]\n  }\n}];"
+      },
+      "id": "prepare-webhook-tests",
+      "name": "Prepare Webhook Tests",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 500]
+    }
+  ],
+  "connections": {
+    "Setup Helper Webhook": {
+      "main": [
+        [
+          {
+            "node": "Generate Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Configuration": {
+      "main": [
+        [
+          {
+            "node": "Validate Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Setup": {
+      "main": [
+        [
+          {
+            "node": "Generate Customizations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Webhook Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Customizations": {
+      "main": [
+        [
+          {
+            "node": "Configuration Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Setup Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "newsletter-automation-setup",
+      "name": "Newsletter Automation Setup"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "setup-helper-v3-supabase"
+}

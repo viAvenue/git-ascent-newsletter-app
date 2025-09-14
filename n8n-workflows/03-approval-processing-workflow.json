@@ -1,0 +1,675 @@
+{
+  "name": "Approval Processing Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-approval",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "approval-webhook",
+      "name": "Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "approval-processing-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "approval-received"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now }}"
+            }
+          ]
+        }
+      },
+      "id": "set-response",
+      "name": "Set Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse approval data from frontend\nconst approvalData = $input.first().json.body;\n\nreturn [{\n  json: {\n    approvalType: approvalData.approvalType,\n    itemId: approvalData.itemId,\n    approved: approvalData.approved,\n    feedback: approvalData.feedback || '',\n    userId: approvalData.userId,\n    workflowId: approvalData.workflowId || $runId,\n    processedAt: new Date().toISOString(),\n    nextAction: approvalData.approved ? 'continue' : 'halt'\n  }\n}];"
+      },
+      "id": "parse-approval-data",
+      "name": "Parse Approval Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "approval-type-stories",
+              "leftValue": "={{ $json.approvalType }}",
+              "rightValue": "stories",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-approval-type",
+      "name": "Check Approval Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "stories-approved",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-stories-approved",
+      "name": "Check Stories Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "url": "https://your-n8n-instance.com/webhook/approval-received",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.n8nApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "approvalType": "stories",
+          "approved": "={{ $json.approved }}",
+          "feedback": "={{ $json.feedback }}",
+          "selectedStories": "={{ $json.selectedStories }}",
+          "workflowId": "={{ $json.workflowId }}",
+          "nextStep": "generate-subject-lines"
+        },
+        "options": {}
+      },
+      "id": "trigger-subject-generation",
+      "name": "Trigger Subject Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "subject-approved",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-subject-approved",
+      "name": "Check Subject Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 580]
+    },
+    {
+      "parameters": {
+        "url": "https://your-n8n-instance.com/webhook/approval-received",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.n8nApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "approvalType": "subject-lines",
+          "approved": "={{ $json.approved }}",
+          "selectedSubject": "={{ $json.selectedSubject }}",
+          "preheader": "={{ $json.preheader }}",
+          "selectedStories": "={{ $json.selectedStories }}",
+          "feedback": "={{ $json.feedback }}",
+          "workflowId": "={{ $json.workflowId }}",
+          "nextStep": "generate-content"
+        },
+        "options": {}
+      },
+      "id": "trigger-content-generation",
+      "name": "Trigger Content Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 580]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "images-approved",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-images-approved",
+      "name": "Check Images Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 780]
+    },
+    {
+      "parameters": {
+        "url": "https://your-n8n-instance.com/webhook/approval-received",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.n8nApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "approvalType": "images",
+          "approved": "={{ $json.approved }}",
+          "approvedImages": "={{ $json.approvedImages }}",
+          "feedback": "={{ $json.feedback }}",
+          "workflowId": "={{ $json.workflowId }}",
+          "nextStep": "finalize-newsletter"
+        },
+        "options": {}
+      },
+      "id": "trigger-newsletter-finalization",
+      "name": "Trigger Newsletter Finalization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 780]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "final-approved",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-final-approved",
+      "name": "Check Final Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 980]
+    },
+    {
+      "parameters": {
+        "url": "https://your-n8n-instance.com/webhook/approval-received",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $credentials.n8nApi.apiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "approvalType": "final-content",
+          "approved": "={{ $json.approved }}",
+          "newsletter": "={{ $json.newsletter }}",
+          "feedback": "={{ $json.feedback }}",
+          "workflowId": "={{ $json.workflowId }}",
+          "nextStep": "publish-newsletter"
+        },
+        "options": {}
+      },
+      "id": "trigger-newsletter-publication",
+      "name": "Trigger Newsletter Publication",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 980]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log approval activity for audit trail\nconst approvalData = $input.first().json;\n\nconst logEntry = {\n  timestamp: new Date().toISOString(),\n  workflowId: approvalData.workflowId,\n  approvalType: approvalData.approvalType,\n  approved: approvalData.approved,\n  userId: approvalData.userId,\n  feedback: approvalData.feedback,\n  itemId: approvalData.itemId\n};\n\n// In a real implementation, this would write to a database\nconsole.log('Approval logged:', JSON.stringify(logEntry, null, 2));\n\nreturn [{\n  json: {\n    logged: true,\n    logEntry: logEntry\n  }\n}];"
+      },
+      "id": "log-approval-activity",
+      "name": "Log Approval Activity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle rejection workflow\nconst approvalData = $input.first().json;\n\nreturn [{\n  json: {\n    workflowId: approvalData.workflowId,\n    approvalType: approvalData.approvalType,\n    rejected: true,\n    feedback: approvalData.feedback,\n    userId: approvalData.userId,\n    nextAction: 'notify-rejection',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "handle-rejection",
+      "name": "Handle Rejection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 1180]
+    },
+    {
+      "parameters": {
+        "url": "https://your-netlify-site.netlify.app/.netlify/functions/workflow-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "workflowId": "={{ $json.workflowId }}",
+          "status": "rejected",
+          "approvalType": "={{ $json.approvalType }}",
+          "feedback": "={{ $json.feedback }}",
+          "rejectedAt": "={{ $json.timestamp }}",
+          "nextAction": "await-revision"
+        },
+        "options": {}
+      },
+      "id": "notify-rejection",
+      "name": "Notify Rejection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 1180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send status update to frontend\nconst approvalData = $input.first().json;\n\nreturn [{\n  json: {\n    workflowId: approvalData.workflowId,\n    status: 'approval-processed',\n    approvalType: approvalData.approvalType,\n    approved: approvalData.approved,\n    nextStage: approvalData.approved ? getNextStage(approvalData.approvalType) : 'revision-needed',\n    timestamp: new Date().toISOString()\n  }\n}];\n\nfunction getNextStage(currentType) {\n  const stages = {\n    'stories': 'subject-line-generation',\n    'subject-lines': 'content-generation',\n    'images': 'newsletter-finalization',\n    'final-content': 'publication'\n  };\n  return stages[currentType] || 'unknown';\n}"
+      },
+      "id": "prepare-status-update",
+      "name": "Prepare Status Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 780]
+    },
+    {
+      "parameters": {
+        "url": "https://your-netlify-site.netlify.app/.netlify/functions/workflow-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "update-frontend-status",
+      "name": "Update Frontend Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 780]
+    }
+  ],
+  "connections": {
+    "Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse Approval Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Approval Data": {
+      "main": [
+        [
+          {
+            "node": "Check Approval Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval Type": {
+      "main": [
+        [
+          {
+            "node": "Check Stories Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Subject Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Images Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Final Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Stories Approved": {
+      "main": [
+        [
+          {
+            "node": "Trigger Subject Generation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Subject Approved": {
+      "main": [
+        [
+          {
+            "node": "Trigger Content Generation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Images Approved": {
+      "main": [
+        [
+          {
+            "node": "Trigger Newsletter Finalization",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Final Approved": {
+      "main": [
+        [
+          {
+            "node": "Trigger Newsletter Publication",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Subject Generation": {
+      "main": [
+        [
+          {
+            "node": "Log Approval Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Status Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Content Generation": {
+      "main": [
+        [
+          {
+            "node": "Log Approval Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Status Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Newsletter Finalization": {
+      "main": [
+        [
+          {
+            "node": "Log Approval Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Status Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Newsletter Publication": {
+      "main": [
+        [
+          {
+            "node": "Log Approval Activity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Status Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Rejection": {
+      "main": [
+        [
+          {
+            "node": "Notify Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Status Update": {
+      "main": [
+        [
+          {
+            "node": "Update Frontend Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "newsletter-automation",
+      "name": "Newsletter Automation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "approval-processing-v1"
+}

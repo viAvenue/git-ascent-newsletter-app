@@ -1,0 +1,552 @@
+{
+  "name": "Newsletter Generation & Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "newsletter-generation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Generation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "newsletter-generation-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "workflowId",
+              "value": "={{ $runId }}"
+            },
+            {
+              "name": "status",
+              "value": "started"
+            }
+          ]
+        }
+      },
+      "id": "set-initial-response",
+      "name": "Set Initial Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Get",
+        "tableId": "articles",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "scraped_date",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({days: 7}).toISO() }}"
+            },
+            {
+              "keyName": "ai_relevant",
+              "condition": "eq",
+              "keyValue": "true"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "processed"
+            }
+          ]
+        },
+        "sort": {
+          "field": "ai_score",
+          "direction": "desc"
+        },
+        "limit": 30
+      },
+      "id": "get-recent-articles",
+      "name": "Get Recent Articles",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 480],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const articles = $input.all();\n\n// Additional filtering and preparation for AI analysis\nconst processedArticles = articles.map(item => {\n  const article = item.json;\n  \n  return {\n    json: {\n      id: article.id,\n      title: article.title,\n      summary: article.summary,\n      source: article.source,\n      ai_score: article.ai_score,\n      ai_topics: article.ai_topics ? JSON.parse(article.ai_topics) : [],\n      word_count: article.word_count,\n      published_date: article.published_date,\n      content: article.content\n    }\n  };\n});\n\n// Sort by AI score and limit to top 25 for analysis\nprocessedArticles.sort((a, b) => b.json.ai_score - a.json.ai_score);\n\nreturn processedArticles.slice(0, 25);"
+      },
+      "id": "process-articles",
+      "name": "Process Articles for Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a business newsletter curator. Select the top 3-4 most important and diverse stories for a business newsletter focused on strategy, operations, leadership, and growth. Ensure variety in topics and sources. Respond with JSON: [{\"id\": \"article_id\", \"title\": \"title\", \"reason\": \"selection reason\", \"newsletter_section\": \"suggested section\"}]"
+          },
+          {
+            "role": "user",
+            "content": "Select from these articles:\n\n{{ $input.all().map((item, index) => `${index + 1}. ID: ${item.json.id}\nTitle: ${item.json.title}\nSource: ${item.json.source}\nAI Score: ${item.json.ai_score}\nTopics: ${item.json.ai_topics.join(', ')}\nSummary: ${item.json.summary.substring(0, 200)}...\n`).join('\n') }}"
+          }
+        ],
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "ai-story-selection",
+      "name": "AI Story Selection",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [900, 480],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json.message.content;\nconst allArticles = $('Process Articles for Analysis').all().map(item => item.json);\n\ntry {\n  const selectedIds = JSON.parse(aiResponse);\n  const selectedStories = selectedIds.map(selection => {\n    const article = allArticles.find(a => a.id == selection.id);\n    if (article) {\n      return {\n        ...article,\n        selectionReason: selection.reason,\n        suggestedSection: selection.newsletter_section\n      };\n    }\n    return null;\n  }).filter(story => story !== null);\n  \n  return [{\n    json: {\n      workflowId: $runId,\n      approvalType: 'stories',\n      selectedCount: selectedStories.length,\n      stories: selectedStories,\n      status: 'pending-approval',\n      analysisData: {\n        totalArticlesAnalyzed: allArticles.length,\n        selectionCriteria: 'Business relevance, topic diversity, source variety',\n        timestamp: new Date().toISOString()\n      }\n    }\n  }];\n} catch (error) {\n  return [{\n    json: {\n      error: 'Failed to parse AI selection',\n      rawResponse: aiResponse,\n      workflowId: $runId\n    }\n  }];\n}"
+      },
+      "id": "prepare-story-approval",
+      "name": "Prepare Story Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 480]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Update",
+        "tableId": "articles",
+        "updateKey": "id",
+        "records": "={{ $json.stories.map(s => ({ id: s.id, status: 'selected' })) }}"
+      },
+      "id": "mark-articles-selected",
+      "name": "Mark Articles as Selected",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 480],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "approvals",
+        "records": [
+          {
+            "approval_type": "stories",
+            "item_id": "={{ $json.workflowId }}-stories",
+            "workflow_id": "={{ $json.workflowId }}",
+            "data": "={{ JSON.stringify($json) }}",
+            "user_id": "system",
+            "user_name": "N8N Workflow"
+          }
+        ]
+      },
+      "id": "log-approval-request",
+      "name": "Log Approval Request",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 480],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://your-netlify-site.netlify.app/.netlify/functions/workflow-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify($json) }}"
+      },
+      "id": "send-for-approval",
+      "name": "Send Stories for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 480]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval-received",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "approval-webhook",
+      "name": "Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 680],
+      "webhookId": "approval-webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{{ JSON.stringify({\"status\": \"approval-received\"}) }}"
+      },
+      "id": "approval-webhook-response",
+      "name": "Approval Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 680]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "approval-check",
+              "leftValue": "={{ $json.body.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-approval-status",
+      "name": "Check Approval Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 680]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Update",
+        "tableId": "approvals",
+        "updateKey": "item_id",
+        "records": [
+          {
+            "item_id": "={{ $json.body.workflowId }}-stories",
+            "approved": "={{ $json.body.approved }}",
+            "feedback": "={{ $json.body.feedback || '' }}",
+            "approved_at": "={{ $now }}"
+          }
+        ]
+      },
+      "id": "update-approval-status",
+      "name": "Update Approval Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 680],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Generate 3 compelling subject lines for a business newsletter. Focus on the main themes and create curiosity while remaining professional. Include predicted performance metrics. Respond with JSON: {\"subjectLines\": [{\"text\": \"subject line\", \"score\": 85, \"reason\": \"why this works\"}], \"preheader\": \"compelling preheader text that complements the subject\"}"
+          },
+          {
+            "role": "user",
+            "content": "Create subject lines for these newsletter stories:\n\n{{ $json.body.selectedStories.map(story => `- ${story.title} (${story.source}): ${story.selectionReason}`).join('\n') }}\n\nKey themes: {{ $json.body.selectedStories.map(s => s.ai_topics).flat().join(', ') }}"
+          }
+        ],
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "generate-subject-lines",
+      "name": "Generate Subject Lines",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 680],
+      "credentials": {
+        "openAiApi": {
+          "id": "openAiApi",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "approvals",
+        "records": [
+          {
+            "approval_type": "subject-lines",
+            "item_id": "={{ $json.body.workflowId }}-subjects",
+            "workflow_id": "={{ $json.body.workflowId }}",
+            "data": "={{ JSON.stringify({subjectLines: JSON.parse($('Generate Subject Lines').first().json.message.content), selectedStories: $json.body.selectedStories}) }}",
+            "user_id": "system",
+            "user_name": "N8N Workflow"
+          }
+        ]
+      },
+      "id": "log-subject-approval",
+      "name": "Log Subject Approval Request",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 680],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://your-netlify-site.netlify.app/.netlify/functions/workflow-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "workflowId": "={{ $json.body.workflowId }}",
+          "approvalType": "subject-lines",
+          "options": "={{ JSON.parse($('Generate Subject Lines').first().json.message.content).subjectLines }}",
+          "preheader": "={{ JSON.parse($('Generate Subject Lines').first().json.message.content).preheader }}",
+          "selectedStories": "={{ $json.body.selectedStories }}",
+          "status": "pending-approval"
+        }
+      },
+      "id": "send-subjects-for-approval",
+      "name": "Send Subjects for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 680]
+    }
+  ],
+  "connections": {
+    "Generation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Initial Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Recent Articles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Initial Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Articles": {
+      "main": [
+        [
+          {
+            "node": "Process Articles for Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Articles for Analysis": {
+      "main": [
+        [
+          {
+            "node": "AI Story Selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Story Selection": {
+      "main": [
+        [
+          {
+            "node": "Prepare Story Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Story Approval": {
+      "main": [
+        [
+          {
+            "node": "Mark Articles as Selected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Articles as Selected": {
+      "main": [
+        [
+          {
+            "node": "Log Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Approval Request": {
+      "main": [
+        [
+          {
+            "node": "Send Stories for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Approval Webhook Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Approval Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Approval Status": {
+      "main": [
+        [
+          {
+            "node": "Update Approval Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Update Approval Status": {
+      "main": [
+        [
+          {
+            "node": "Generate Subject Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Subject Lines": {
+      "main": [
+        [
+          {
+            "node": "Log Subject Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Subject Approval Request": {
+      "main": [
+        [
+          {
+            "node": "Send Subjects for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "newsletter-automation",
+      "name": "Newsletter Automation"
+    }
+  ],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "newsletter-generation-v3-supabase"
+}

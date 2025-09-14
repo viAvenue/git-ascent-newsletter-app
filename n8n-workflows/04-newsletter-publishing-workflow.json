@@ -1,0 +1,362 @@
+{
+  "name": "Newsletter Publishing & Distribution",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "publish-newsletter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "publish-webhook",
+      "name": "Publish Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "newsletter-publishing-webhook"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "publishing-started"
+            },
+            {
+              "name": "workflowId",
+              "value": "={{ $runId }}"
+            }
+          ]
+        }
+      },
+      "id": "set-response",
+      "name": "Set Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const newsletterData = $input.first().json.body;\n\nreturn [{\n  json: {\n    newsletter: newsletterData.newsletter,\n    metadata: {\n      workflowId: newsletterData.workflowId || $runId,\n      subject: newsletterData.newsletter.subject,\n      publishDate: new Date().toISOString(),\n      wordCount: newsletterData.newsletter.content.split(' ').length\n    },\n    feedback: newsletterData.feedback || ''\n  }\n}];"
+      },
+      "id": "parse-newsletter-data",
+      "name": "Parse Newsletter Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const newsletter = $input.first().json.newsletter;\nconst metadata = $input.first().json.metadata;\n\n// Convert markdown to HTML with better formatting\nlet htmlContent = newsletter.content\n  .replace(/^### (.+)$/gm, '<h3 style=\"color: #2563eb; margin-top: 24px; margin-bottom: 12px;\">$1</h3>')\n  .replace(/^## (.+)$/gm, '<h2 style=\"color: #1e40af; margin-top: 32px; margin-bottom: 16px;\">$1</h2>')\n  .replace(/^# (.+)$/gm, '<h1 style=\"color: #1e3a8a; margin-top: 40px; margin-bottom: 20px;\">$1</h1>')\n  .replace(/\\*\\*(.+?)\\*\\*/g, '<strong style=\"color: #374151;\">$1</strong>')\n  .replace(/\\*(.+?)\\*/g, '<em style=\"color: #6b7280;\">$1</em>')\n  .replace(/\\n\\n/g, '</p><p style=\"margin-bottom: 16px; line-height: 1.6;\">')\n  .replace(/^(.+)$/gm, '<p style=\"margin-bottom: 16px; line-height: 1.6;\">$1</p>');\n\n// Create full HTML email template\nconst emailHtml = `\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>${newsletter.subject}</title>\n    <style>\n        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #374151; }\n        .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0; }\n        .content { background: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }\n        .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1 style=\"margin: 0; font-size: 28px;\">${newsletter.subject}</h1>\n            <p style=\"margin: 10px 0 0 0; opacity: 0.9;\">${newsletter.preheader || 'Your weekly business insights'}</p>\n        </div>\n        <div class=\"content\">\n            ${htmlContent}\n        </div>\n        <div class=\"footer\">\n            <p>Powered by N8N Newsletter Automation</p>\n            <p>Generated on ${new Date().toLocaleDateString()}</p>\n        </div>\n    </div>\n</body>\n</html>\n`;\n\n// Calculate reading time\nconst readingTime = Math.ceil(metadata.wordCount / 200);\n\nreturn [{\n  json: {\n    subject: newsletter.subject,\n    preheader: newsletter.preheader || '',\n    content: newsletter.content,\n    html_content: emailHtml,\n    sections: newsletter.sections ? JSON.stringify(newsletter.sections) : null,\n    selected_articles: newsletter.selectedArticles ? JSON.stringify(newsletter.selectedArticles) : null,\n    word_count: metadata.wordCount,\n    estimated_read_time: readingTime,\n    status: 'draft',\n    workflow_id: metadata.workflowId\n  }\n}];"
+      },
+      "id": "convert-to-html",
+      "name": "Convert to HTML Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "newsletters",
+        "records": [
+          {
+            "subject": "={{ $json.subject }}",
+            "preheader": "={{ $json.preheader }}",
+            "content": "={{ $json.content }}",
+            "html_content": "={{ $json.html_content }}",
+            "sections": "={{ $json.sections }}",
+            "selected_articles": "={{ $json.selected_articles }}",
+            "word_count": "={{ $json.word_count }}",
+            "estimated_read_time": "={{ $json.estimated_read_time }}",
+            "status": "={{ $json.status }}",
+            "workflow_id": "={{ $json.workflow_id }}"
+          }
+        ]
+      },
+      "id": "save-newsletter-draft",
+      "name": "Save Newsletter Draft",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 480],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Update",
+        "tableId": "newsletters",
+        "updateKey": "workflow_id",
+        "records": [
+          {
+            "workflow_id": "={{ $json.workflow_id }}",
+            "status": "published",
+            "published_at": "={{ $now }}"
+          }
+        ]
+      },
+      "id": "mark-newsletter-published",
+      "name": "Mark Newsletter as Published",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 480],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Update",
+        "tableId": "articles",
+        "updateKey": "status",
+        "records": [
+          {
+            "status": "published"
+          }
+        ],
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "selected"
+            }
+          ]
+        }
+      },
+      "id": "mark-articles-published",
+      "name": "Mark Articles as Published",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 680],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const newsletter = $input.first().json;\n\n// Generate analytics data\nconst analytics = {\n  newsletterId: `newsletter-${new Date().toISOString().split('T')[0]}`,\n  subject: newsletter.subject,\n  publishDate: new Date().toISOString(),\n  wordCount: newsletter.word_count,\n  estimatedReadTime: newsletter.estimated_read_time,\n  htmlSize: Buffer.byteLength(newsletter.html_content, 'utf8'),\n  markdownSize: Buffer.byteLength(newsletter.content, 'utf8'),\n  sectionsCount: newsletter.sections ? JSON.parse(newsletter.sections).length : 0,\n  articlesCount: newsletter.selected_articles ? JSON.parse(newsletter.selected_articles).length : 0\n};\n\nreturn [{\n  json: analytics\n}];"
+      },
+      "id": "prepare-analytics",
+      "name": "Prepare Analytics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 680]
+    },
+    {
+      "parameters": {
+        "resource": "Row",
+        "operation": "Create",
+        "tableId": "workflow_logs",
+        "records": [
+          {
+            "workflow_id": "={{ $json.workflow_id }}",
+            "workflow_name": "Newsletter Publishing",
+            "workflow_type": "publishing",
+            "status": "completed",
+            "step_name": "Newsletter Published Successfully",
+            "output_data": "={{ JSON.stringify($('Prepare Analytics').first().json) }}",
+            "completed_at": "={{ $now }}"
+          }
+        ]
+      },
+      "id": "log-publishing-completion",
+      "name": "Log Publishing Completion",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 680],
+      "credentials": {
+        "supabaseApi": {
+          "id": "newsletter_supabase",
+          "name": "Newsletter Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://your-netlify-site.netlify.app/.netlify/functions/workflow-status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "workflowId": "={{ $json.workflow_id }}",
+          "status": "published",
+          "newsletter": {
+            "subject": "={{ $json.subject }}",
+            "publishDate": "={{ $now }}",
+            "wordCount": "={{ $json.word_count }}",
+            "estimatedReadTime": "={{ $json.estimated_read_time }}"
+          },
+          "analytics": "={{ $('Prepare Analytics').first().json }}",
+          "completedAt": "={{ $now }}"
+        }
+      },
+      "id": "notify-completion",
+      "name": "Notify Frontend Completion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 480]
+    }
+  ],
+  "connections": {
+    "Publish Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse Newsletter Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Response": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Newsletter Data": {
+      "main": [
+        [
+          {
+            "node": "Convert to HTML Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to HTML Email": {
+      "main": [
+        [
+          {
+            "node": "Save Newsletter Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Newsletter Draft": {
+      "main": [
+        [
+          {
+            "node": "Mark Newsletter as Published",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Mark Articles as Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Newsletter as Published": {
+      "main": [
+        [
+          {
+            "node": "Notify Frontend Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Articles as Published": {
+      "main": [
+        [
+          {
+            "node": "Prepare Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Analytics": {
+      "main": [
+        [
+          {
+            "node": "Log Publishing Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Publishing Completion": {
+      "main": [
+        [
+          {
+            "node": "Notify Frontend Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "newsletter-automation",
+      "name": "Newsletter Automation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "newsletter-publishing-v3-supabase"
+}

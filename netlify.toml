@@ -1,0 +1,96 @@
+[images]
+  remote_images = ["https://source.unsplash.com/.*", "https://images.unsplash.com/.*", "https://ext.same-assets.com/.*", "https://ugc.same-assets.com/.*"]
+
+[build]
+  # Build command for Next.js application
+  command = "npm run build"
+
+  # Directory to publish (Next.js with SSR)
+  publish = ".next"
+
+  # Netlify Functions directory
+  functions = "netlify/functions"
+
+[build.environment]
+  # Node.js version
+  NODE_VERSION = "18"
+
+  # Package manager
+  NPM_FLAGS = "--version"
+
+# Redirect configuration for Next.js
+[[redirects]]
+  # API routes to Netlify Functions
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  # Catch-all for Next.js routing
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security and performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Security headers
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # CORS headers for API functions
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    # Cache static assets for 1 year
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    # CORS for API endpoints
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
+
+# Build processing optimization
+[build.processing]
+  skip_processing = false
+
+[build.processing.css]
+  bundle = true
+  minify = true
+
+[build.processing.js]
+  bundle = true
+  minify = true
+
+[build.processing.html]
+  pretty_urls = true
+
+# Context-specific settings
+[context.production]
+  # Production environment settings
+  command = "npm run build"
+
+[context.deploy-preview]
+  # Deploy preview settings (for pull requests)
+  command = "npm run build"
+
+[context.branch-deploy]
+  # Branch deploy settings
+  command = "npm run build"
+
+# Dev server settings (for Netlify Dev)
+[dev]
+  command = "npm run dev"
+  port = 3000
+  publish = "src"
+  autoLaunch = false
